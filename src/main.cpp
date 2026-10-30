@@ -1,100 +1,136 @@
-/**
- * Include the Geode headers.
- */
 #include <Geode/Geode.hpp>
+#include <Geode/modify/MenuLayer.hpp>
 
-/**
- * Brings cocos2d and all Geode namespaces to the current scope.
- */
 using namespace geode::prelude;
 
-/**
- * `$modify` lets you extend and modify GD's classes.
- * To hook a function in Geode, simply $modify the class
- * and write a new function definition with the signature of
- * the function you want to hook.
- *
- * Here we use the overloaded `$modify` macro to set our own class name,
- * so that we can use it for button callbacks.
- *
- * Notice the header being included, you *must* include the header for
- * the class you are modifying, or you will get a compile error.
- *
- * Another way you could do this is like this:
- *
- * struct MyMenuLayer : Modify<MyMenuLayer, MenuLayer> {};
- */
-#include <Geode/modify/MenuLayer.hpp>
-class $modify(MyMenuLayer, MenuLayer) {
-	/**
-	 * Typically classes in GD are initialized using the `init` function, (though not always!),
-	 * so here we use it to add our own button to the bottom menu.
-	 *
-	 * Note that for all hooks, your signature has to *match exactly*,
-	 * `void init()` would not place a hook!
-	*/
-	bool init() {
-		/**
-		 * We call the original init function so that the
-		 * original class is properly initialized.
-		 */
-		if (!MenuLayer::init()) {
-			return false;
-		}
+static std::string currentStyle() {
+    return Mod::get()->getSettingValue<std::string>("style");
+}
 
-		/**
-		 * You can use methods from the `geode::log` namespace to log messages to the console,
-		 * being useful for debugging and such. See this page for more info about logging:
-		 * https://docs.geode-sdk.org/tutorials/logging
-		*/
-		log::debug("Hello from my MenuLayer::init hook! This layer has {} children.", this->getChildrenCount());
+// Earth-colored pixel tile background, drawn entirely in code
+static CCNode* makeBlockyBackground(CCSize size) {
+    auto node = CCDrawNode::create();
+    const float tile = 16.f;
+    unsigned int seed = 12345;
+    for (float y = 0.f; y < size.height; y += tile) {
+        for (float x = 0.f; x < size.width; x += tile) {
+            seed = seed * 1664525u + 1013904223u;
+            float r = ((seed >> 16) & 0xFF) / 255.f;
+            float shade = 0.22f + r * 0.14f;
+            ccColor4F c = ccc4f(shade * 1.4f, shade * 0.95f, shade * 0.6f, 1.f);
+            CCPoint v[4] = {
+                CCPoint(x, y),
+                CCPoint(x + tile - 1.f, y),
+                CCPoint(x + tile - 1.f, y + tile - 1.f),
+                CCPoint(x, y + tile - 1.f)
+            };
+            node->drawPolygon(v, 4, c, 0.f, c);
+        }
+    }
+    return node;
+}
 
-		/**
-		 * See this page for more info about buttons
-		 * https://docs.geode-sdk.org/tutorials/buttons
-		*/
-		auto myButton = CCMenuItemSpriteExtra::create(
-			CCSprite::createWithSpriteFrameName("GJ_likeBtn_001.png"),
-			this,
-			/**
-			 * Here we use the name we set earlier for our modify class.
-			*/
-			menu_selector(MyMenuLayer::onMyButton)
-		);
+// Tints every button in a menu with one color
+static void tintMenu(CCNode* menu, ccColor3B color) {
+    if (!menu) return;
+    for (auto child : CCArrayExt<CCNode*>(menu->getChildren())) {
+        if (auto item = typeinfo_cast<CCMenuItemSpriteExtra*>(child)) {
+            if (auto rgba = typeinfo_cast<CCRGBAProtocol*>(item->getNormalImage())) {
+                rgba->setColor(color);
+            }
+        }
+    }
+}
 
-		/**
-		 * Here we access the `bottom-menu` node by its ID, and add our button to it.
-		 * Node IDs are a Geode feature, see this page for more info about it:
-		 * https://docs.geode-sdk.org/tutorials/nodetree
-		*/
-		auto menu = this->getChildByID("bottom-menu");
-		menu->addChild(myButton);
+class $modify(ThemeMenuLayer, MenuLayer) {
+    // One wide button of the vertical column
+    CCMenuItemSpriteExtra* makeWideButton(char const* text, SEL_MenuHandler cb) {
+        auto spr = ButtonSprite::create(text, 220, true, "bigFont.fnt", "GJ_button_04.png", 30.f, 0.7f);
+        return CCMenuItemSpriteExtra::create(spr, this, cb);
+    }
 
-		/**
-		 * The `_spr` string literal operator just prefixes the string with
-		 * your mod id followed by a slash. This is good practice for setting your own node ids.
-		*/
-		myButton->setID("my-button"_spr);
+    bool init() {
+        if (!MenuLayer::init()) return false;
 
-		/**
-		 * We update the layout of the menu to ensure that our button is properly placed.
-		 * This is yet another Geode feature, see this page for more info about it:
-		 * https://docs.geode-sdk.org/tutorials/layouts
-		*/
-		menu->updateLayout();
+        std::string style = currentStyle();
+        if (style == "Default") return true;
 
-		/**
-		 * We return `true` to indicate that the class was properly initialized.
-		 */
-		return true;
-	}
+        auto winSize = CCDirector::get()->getWinSize();
 
-	/**
-	 * This is the callback function for the button we created earlier.
-	 * The signature for button callbacks must always be the same,
-	 * return type `void` and taking a `CCObject*`.
-	*/
-	void onMyButton(CCObject*) {
-		FLAlertLayer::create("Geode", "Hello from my custom mod!", "OK")->show();
-	}
+        // Hide the original menu background
+        if (auto children = this->getChildren()) {
+            for (auto child : CCArrayExt<CCNode*>(children)) {
+                if (typeinfo_cast<MenuGameLayer*>(child)) {
+                    child->setVisible(false);
+                } else if (typeinfo_cast<CCSprite*>(child)
+                           && child->getID().empty()
+                           && child->getZOrder() < 0
+                           && child->getContentSize().width * child->getScaleX() > winSize.width * 0.9f) {
+                    child->setVisible(false);
+                }
+            }
+        }
+
+        if (style == "Blocky") {
+            this->addChild(makeBlockyBackground(winSize), -100);
+
+            // Replace the original button row with a centered vertical column
+            if (auto oldMenu = this->getChildByID("main-menu")) {
+                oldMenu->setVisible(false);
+            }
+
+            auto column = CCMenu::create();
+            column->setID("blocky-menu"_spr);
+            column->setPosition({0.f, 0.f});
+
+            float cx = winSize.width / 2.f;
+            float y = winSize.height / 2.f + 10.f;
+            float gap = 36.f;
+
+            auto play = makeWideButton("Play", menu_selector(MenuLayer::onPlay));
+            play->setPosition({cx, y});
+            column->addChild(play);
+
+            auto garage = makeWideButton("Garage", menu_selector(MenuLayer::onGarage));
+            garage->setPosition({cx, y - gap});
+            column->addChild(garage);
+
+            auto create = makeWideButton("Create", menu_selector(MenuLayer::onCreator));
+            create->setPosition({cx, y - gap * 2.f});
+            column->addChild(create);
+
+            auto options = makeWideButton("Settings", menu_selector(MenuLayer::onOptions));
+            options->setPosition({cx, y - gap * 3.f});
+            column->addChild(options);
+
+            this->addChild(column, 5);
+
+            // Pulsing tilted splash text
+            auto splash = CCLabelBMFont::create("Jump!", "goldFont.fnt");
+            splash->setRotation(-18.f);
+            splash->setScale(0.7f);
+            CCPoint pos(winSize.width / 2.f + 110.f, winSize.height - 80.f);
+            if (auto title = this->getChildByID("main-title")) {
+                pos = title->getPosition() + CCPoint(110.f, 20.f);
+            }
+            splash->setPosition(pos);
+            splash->runAction(CCRepeatForever::create(CCSequence::create(
+                CCScaleTo::create(0.5f, 0.8f),
+                CCScaleTo::create(0.5f, 0.7f),
+                nullptr
+            )));
+            this->addChild(splash, 10);
+        }
+        else if (style == "Dark") {
+            auto bg = CCLayerGradient::create(ccc4(20, 20, 24, 255), ccc4(50, 50, 60, 255));
+            this->addChild(bg, -100);
+        }
+        else if (style == "Neon") {
+            auto bg = CCLayerGradient::create(ccc4(25, 0, 60, 255), ccc4(0, 40, 80, 255));
+            this->addChild(bg, -100);
+            tintMenu(this->getChildByID("main-menu"), ccc3(0, 255, 255));
+        }
+
+        return true;
+    }
 };
