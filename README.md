@@ -1,23 +1,29 @@
-# Template
-This is where she makes a mod.
+# Theme UI
 
-<img src="logo.png" width="150" alt="the mod's logo" />
+A Geode mod for Geometry Dash that changes the main menu with multiple styles, including a Minecraft-inspired blocky theme.
 
-*Update logo.png to change your mod's icon (please)*
+## Features
 
-## Getting started
-We recommend heading over to [the getting started section on our docs](https://docs.geode-sdk.org/getting-started/) for useful info on what to do next.
+- Blocky style with a scrolling blocky world, custom logo and block buttons
+- Dark and Neon styles
+- Style selection in the mod settings
+- Works on Android
 
-## Build instructions
-For more info, see [our docs](https://docs.geode-sdk.org/getting-started/create-mod#build)
-```sh
-# Assuming you have the Geode CLI set up already
-geode build
-```
+## Requirements
 
-# Resources
-* [Geode SDK Documentation](https://docs.geode-sdk.org/)
-* [Geode SDK Source Code](https://github.com/geode-sdk/geode/)
-* [Geode CLI](https://github.com/geode-sdk/cli)
-* [Bindings](https://github.com/geode-sdk/bindings/)
-* [Dev Tools](https://github.com/geode-sdk/DevTools)
+- Geometry Dash 2.2081
+- Geode 5.11.2 or newer
+
+## Installation
+
+1. Download the latest `.geode` file from the Actions tab (Build Output).
+2. Open it with Geode Launcher, or copy it into the `geode/mods` folder.
+3. Start the game with Geode Launcher.
+
+## Usage
+
+Open Geode, then **Mods**, then **Theme UI**, then **Settings**, and choose a style. Go back to the main menu to apply it.
+
+## Disclaimer
+
+Unofficial fan-made theme. Not affiliated with Mojang or Microsoft.
