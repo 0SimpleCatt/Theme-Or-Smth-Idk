@@ -6,6 +6,7 @@
   "version": "v1.0.0",
   "developer": "SillyCat",
   "description": "Changes the main menu look with multiple styles.",
+  "tags": ["customization", "interface", "joke"],
   "resources": {
     "sprites": ["resources/*.png"]
   },
