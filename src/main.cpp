@@ -42,11 +42,88 @@ static void tintMenu(CCNode* menu, ccColor3B color) {
     }
 }
 
+// Stone block plate: black border, light top/left bevel, dark bottom/right bevel
+static CCNode* makeBlockPlate(float w, float h) {
+    auto node = CCNode::create();
+    node->setContentSize({w, h});
+
+    auto border = CCLayerColor::create(ccc4(0, 0, 0, 255), w, h);
+    node->addChild(border);
+
+    auto body = CCLayerColor::create(ccc4(112, 112, 112, 255), w - 4.f, h - 4.f);
+    body->setPosition({2.f, 2.f});
+    node->addChild(body);
+
+    auto top = CCLayerColor::create(ccc4(170, 170, 170, 255), w - 4.f, 2.f);
+    top->setPosition({2.f, h - 4.f});
+    node->addChild(top);
+
+    auto left = CCLayerColor::create(ccc4(170, 170, 170, 255), 2.f, h - 4.f);
+    left->setPosition({2.f, 2.f});
+    node->addChild(left);
+
+    auto bottom = CCLayerColor::create(ccc4(70, 70, 70, 255), w - 4.f, 2.f);
+    bottom->setPosition({2.f, 2.f});
+    node->addChild(bottom);
+
+    auto right = CCLayerColor::create(ccc4(70, 70, 70, 255), 2.f, h - 4.f);
+    right->setPosition({w - 4.f, 2.f});
+    node->addChild(right);
+
+    return node;
+}
+
+// Block button with a white label and a dark text shadow
+static CCNode* makeBlockButton(char const* text, float w, float h) {
+    auto node = makeBlockPlate(w, h);
+
+    auto shadow = CCLabelBMFont::create(text, "bigFont.fnt");
+    shadow->setColor(ccc3(40, 40, 40));
+    shadow->setScale(0.55f);
+    shadow->setPosition({w / 2.f + 1.f, h / 2.f - 1.f});
+    node->addChild(shadow);
+
+    auto label = CCLabelBMFont::create(text, "bigFont.fnt");
+    label->setScale(0.55f);
+    label->setPosition({w / 2.f, h / 2.f});
+    node->addChild(label);
+
+    return node;
+}
+
+// Puts a block tile behind every icon button of a menu
+static void blockifyMenu(CCNode* menu, float pad) {
+    if (!menu) return;
+    for (auto child : CCArrayExt<CCNode*>(menu->getChildren())) {
+        if (auto item = typeinfo_cast<CCMenuItemSpriteExtra*>(child)) {
+            CCSize s = item->getContentSize();
+            float side = std::max(s.width, s.height) + pad;
+            auto plate = makeBlockPlate(side, side);
+            plate->setPosition({(s.width - side) / 2.f, (s.height - side) / 2.f});
+            item->addChild(plate, -1);
+        }
+    }
+}
+
+// Corner text like the Minecraft title screen (white with a shadow)
+static void addCornerText(CCNode* parent, char const* text, CCPoint pos, CCPoint anchor) {
+    auto shadow = CCLabelBMFont::create(text, "chatFont.fnt");
+    shadow->setColor(ccc3(60, 60, 60));
+    shadow->setScale(0.6f);
+    shadow->setAnchorPoint(anchor);
+    shadow->setPosition(pos + CCPoint(0.8f, -0.8f));
+    parent->addChild(shadow, 20);
+
+    auto label = CCLabelBMFont::create(text, "chatFont.fnt");
+    label->setScale(0.6f);
+    label->setAnchorPoint(anchor);
+    label->setPosition(pos);
+    parent->addChild(label, 21);
+}
+
 class $modify(ThemeMenuLayer, MenuLayer) {
-    // One wide button of the vertical column
     CCMenuItemSpriteExtra* makeWideButton(char const* text, SEL_MenuHandler cb) {
-        auto spr = ButtonSprite::create(text, 220, true, "bigFont.fnt", "GJ_button_04.png", 30.f, 0.7f);
-        return CCMenuItemSpriteExtra::create(spr, this, cb);
+        return CCMenuItemSpriteExtra::create(makeBlockButton(text, 220.f, 28.f), this, cb);
     }
 
     bool init() {
@@ -74,7 +151,22 @@ class $modify(ThemeMenuLayer, MenuLayer) {
         if (style == "Blocky") {
             this->addChild(makeBlockyBackground(winSize), -100);
 
-            // Replace the original button row with a centered vertical column
+            // Custom logo (resources/mc-logo.png). Falls back to the original title if missing.
+            CCPoint splashPos(winSize.width / 2.f + 110.f, winSize.height - 80.f);
+            auto logo = CCSprite::create("mc-logo.png"_spr);
+            if (logo) {
+                if (auto title = this->getChildByID("main-title")) {
+                    title->setVisible(false);
+                }
+                float targetW = 340.f;
+                logo->setScale(targetW / logo->getContentSize().width);
+                CCPoint logoPos(winSize.width / 2.f, winSize.height - 40.f);
+                logo->setPosition(logoPos);
+                this->addChild(logo, 6);
+                splashPos = CCPoint(logoPos.x + targetW / 2.f - 30.f, logoPos.y - 20.f);
+            }
+
+            // Hide the original button row and build a block button column
             if (auto oldMenu = this->getChildByID("main-menu")) {
                 oldMenu->setVisible(false);
             }
@@ -84,8 +176,8 @@ class $modify(ThemeMenuLayer, MenuLayer) {
             column->setPosition({0.f, 0.f});
 
             float cx = winSize.width / 2.f;
-            float y = winSize.height / 2.f + 10.f;
-            float gap = 36.f;
+            float y = winSize.height - 95.f;
+            float gap = 34.f;
 
             auto play = makeWideButton("Play", menu_selector(MenuLayer::onPlay));
             play->setPosition({cx, y});
@@ -105,21 +197,25 @@ class $modify(ThemeMenuLayer, MenuLayer) {
 
             this->addChild(column, 5);
 
+            // Block tiles behind the round icon buttons
+            blockifyMenu(this->getChildByID("bottom-menu"), 6.f);
+            blockifyMenu(this->getChildByID("social-media-menu"), 4.f);
+
             // Pulsing tilted splash text
-            auto splash = CCLabelBMFont::create("Jump!", "goldFont.fnt");
-            splash->setRotation(-18.f);
-            splash->setScale(0.7f);
-            CCPoint pos(winSize.width / 2.f + 110.f, winSize.height - 80.f);
-            if (auto title = this->getChildByID("main-title")) {
-                pos = title->getPosition() + CCPoint(110.f, 20.f);
-            }
-            splash->setPosition(pos);
+            auto splash = CCLabelBMFont::create("Maybe Not", "goldFont.fnt");
+            splash->setRotation(-20.f);
+            splash->setScale(0.55f);
+            splash->setPosition(splashPos);
             splash->runAction(CCRepeatForever::create(CCSequence::create(
-                CCScaleTo::create(0.5f, 0.8f),
-                CCScaleTo::create(0.5f, 0.7f),
+                CCScaleTo::create(0.5f, 0.62f),
+                CCScaleTo::create(0.5f, 0.55f),
                 nullptr
             )));
             this->addChild(splash, 10);
+
+            // Corner texts (top corners, the bottom ones are used by GD buttons)
+            addCornerText(this, "Geometry Dash 2.2081", CCPoint(34.f, winSize.height - 8.f), CCPoint(0.f, 1.f));
+            addCornerText(this, "Theme UI by SillyCat", CCPoint(winSize.width - 10.f, winSize.height - 8.f), CCPoint(1.f, 1.f));
         }
         else if (style == "Dark") {
             auto bg = CCLayerGradient::create(ccc4(20, 20, 24, 255), ccc4(50, 50, 60, 255));
