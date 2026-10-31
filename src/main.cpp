@@ -207,16 +207,61 @@ static CCNode* makeBlockButton(char const* text, float w, float h) {
     return node;
 }
 
-// Puts a block tile behind every button of a menu
-static void blockifyMenu(CCNode* menu, float pad) {
-    if (!menu) return;
+// Puts a block plate behind one button.
+// fixedWorldSide > 0: the plate is a square of that size on screen (same size for every button).
+// Otherwise the plate follows the button size plus pad.
+static void plateItem(CCMenuItemSpriteExtra* item, float fixedWorldSide, float pad) {
+    if (item->getChildByID("block-plate"_spr)) return;
+    CCSize s = item->getContentSize();
+    if (s.width < 1.f || s.height < 1.f) return;
+
+    float sc = std::max(item->getScale(), 0.01f);
+    float w, h;
+    if (fixedWorldSide > 0.f) {
+        w = fixedWorldSide / sc;
+        h = fixedWorldSide / sc;
+    } else {
+        w = s.width + pad;
+        h = s.height + pad;
+    }
+
+    auto plate = makeBlockPlate(w, h);
+    plate->setID("block-plate"_spr);
+    plate->setPosition({(s.width - w) / 2.f, (s.height - h) / 2.f});
+    item->addChild(plate, -1);
+}
+
+// Plates every button found in any visible menu
+static void blockifyTree(CCNode* node, float pad, int depth) {
+    if (!node || !node->isVisible() || depth > 4) return;
+    if (!node->getChildrenCount()) return;
+    for (auto child : CCArrayExt<CCNode*>(node->getChildren())) {
+        if (auto item = typeinfo_cast<CCMenuItemSpriteExtra*>(child)) {
+            plateItem(item, -1.f, pad);
+        } else if (child->getID() != "blocky-menu"_spr) {
+            blockifyTree(child, pad, depth + 1);
+        }
+    }
+}
+
+// Makes a row of buttons bigger around its center
+static void enlargeRow(CCNode* menu, float factor) {
+    if (!menu || !menu->getChildrenCount()) return;
+
+    float minX = 1e9f;
+    float maxX = -1e9f;
+    for (auto child : CCArrayExt<CCNode*>(menu->getChildren())) {
+        if (!typeinfo_cast<CCMenuItemSpriteExtra*>(child)) continue;
+        minX = std::min(minX, child->getPositionX());
+        maxX = std::max(maxX, child->getPositionX());
+    }
+    if (minX > maxX) return;
+
+    float cx = (minX + maxX) / 2.f;
     for (auto child : CCArrayExt<CCNode*>(menu->getChildren())) {
         if (auto item = typeinfo_cast<CCMenuItemSpriteExtra*>(child)) {
-            CCSize s = item->getContentSize();
-            if (s.width < 1.f || s.height < 1.f) continue;
-            auto plate = makeBlockPlate(s.width + pad, s.height + pad);
-            plate->setPosition({-pad / 2.f, -pad / 2.f});
-            item->addChild(plate, -1);
+            item->setPositionX(cx + (item->getPositionX() - cx) * factor);
+            item->setScale(item->getScale() * factor);
         }
     }
 }
@@ -313,13 +358,20 @@ class $modify(ThemeMenuLayer, MenuLayer) {
 
             this->addChild(column, 5);
 
-            // Block tiles behind every other button of every visible menu
-            for (auto child : CCArrayExt<CCNode*>(this->getChildren())) {
-                auto menu = typeinfo_cast<CCMenu*>(child);
-                if (!menu || !menu->isVisible()) continue;
-                if (menu->getID() == "blocky-menu"_spr) continue;
-                blockifyMenu(menu, 6.f);
+            // Bottom row: bigger icons, every plate has the same size
+            if (auto bottom = this->getChildByID("bottom-menu")) {
+                enlargeRow(bottom, 1.15f);
+                if (bottom->getChildrenCount()) {
+                    for (auto child : CCArrayExt<CCNode*>(bottom->getChildren())) {
+                        if (auto item = typeinfo_cast<CCMenuItemSpriteExtra*>(child)) {
+                            plateItem(item, 60.f, 0.f);
+                        }
+                    }
+                }
             }
+
+            // Plates behind every other button (profile, social, daily, more games, ...)
+            blockifyTree(this, 6.f, 0);
 
             // Pulsing tilted splash text
             auto splash = CCLabelBMFont::create("Maybe Not", "goldFont.fnt");
@@ -333,9 +385,8 @@ class $modify(ThemeMenuLayer, MenuLayer) {
             )));
             this->addChild(splash, 10);
 
-            // Corner texts
+            // Corner text (version only, credit removed)
             addCornerText(this, "Geometry Dash 2.2081", CCPoint(34.f, winSize.height - 8.f), CCPoint(0.f, 1.f));
-            addCornerText(this, "Theme UI by SillyCat", CCPoint(winSize.width - 10.f, winSize.height - 8.f), CCPoint(1.f, 1.f));
         }
         else if (style == "Dark") {
             auto bg = CCLayerGradient::create(ccc4(20, 20, 24, 255), ccc4(50, 50, 60, 255));
